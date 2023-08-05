@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	v10validator "github.com/go-playground/validator/v10"
@@ -24,7 +25,9 @@ import (
 )
 
 func main() {
-	log.Fatal(Execute())
+	if err := Execute(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatal(err)
+	}
 }
 
 func Execute() error {
@@ -75,8 +78,12 @@ func Execute() error {
 		th = handler.NewTransaction(ts, a, v)
 	)
 
-	defer close(scj)
-	defer close(scr)
+	defer func() {
+		cancel()
+		wg.Wait()
+		close(scj)
+		close(scr)
+	}()
 
 	scw.Do(ctx)
 	ouw.Do(ctx)
@@ -99,9 +106,6 @@ func Execute() error {
 	})
 
 	err = http.ListenAndServe(cfg.ServerAddress(), r)
-
-	cancel()
-	wg.Wait()
 
 	return err
 }
